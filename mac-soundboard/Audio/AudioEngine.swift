@@ -11,19 +11,24 @@ import Foundation
 import Combine
 
 class AudioEngine: ObservableObject {
-    private let engine = AVAudioEngine()
-    private let masterMixer = AVAudioMixerNode()
-    private let soundMixer  = AVAudioMixerNode()
+
+    // We use separate AVAudioPlayer instances — much simpler and more reliable
+    // than AVAudioEngine node management for this use case.
+    // AVAudioEngine is still used for mic mixing → output routing.
+
+    private var oneShotPlayers: [AVAudioPlayer] = []   // fire and forget, multiple at once
+    private var togglePlayers:  [UUID: AVAudioPlayer] = [:]
+    private var toggleActive:   Set<UUID> = []
+
+    // Mic pipeline
+    private let engine      = AVAudioEngine()
     private let micMixer    = AVAudioMixerNode()
+    private let masterMixer = AVAudioMixerNode()
 
-    // One persistent node per slot for toggle/hold; one-shot gets fresh nodes
-    private var toggleNodes: [UUID: AVAudioPlayerNode] = [:]
-    // Track toggle state separately
-    private var toggleActive: Set<UUID> = []
+    @Published var isRunning     = false
+    @Published var micVolume:    Float = 0.8  { didSet { micMixer.outputVolume    = micVolume    } }
+    @Published var masterVolume: Float = 1.0  { didSet { masterMixer.outputVolume = masterVolume } }
 
-    @Published var isRunning = false
-    @Published var micVolume: Float = 0.8  { didSet { micMixer.outputVolume    = micVolume    } }
-    @Published var masterVolume: Float = 1.0 { didSet { masterMixer.outputVolume = masterVolume } }
     @Published var selectedMicID:    AudioDeviceID = kAudioObjectUnknown
     @Published var selectedOutputID: AudioDeviceID = kAudioObjectUnknown
     @Published var availableInputDevices:  [(id: AudioDeviceID, name: String)] = []
@@ -31,41 +36,44 @@ class AudioEngine: ObservableObject {
 
     init() {
         fetchDevices()
-        setupGraph()
-        registerInterruptionHandler()
+        setupMicPipeline()
     }
 
-    // MARK: - Graph
+    // MARK: - Mic pipeline (separate from sound playback)
 
-    private func setupGraph() {
-        engine.attach(masterMixer)
-        engine.attach(soundMixer)
+    private func setupMicPipeline() {
         engine.attach(micMixer)
-        engine.connect(soundMixer,  to: masterMixer,       format: nil)
+        engine.attach(masterMixer)
         engine.connect(micMixer,    to: masterMixer,       format: nil)
         engine.connect(masterMixer, to: engine.outputNode, format: nil)
-        masterMixer.outputVolume = masterVolume
         micMixer.outputVolume    = micVolume
+        masterMixer.outputVolume = masterVolume
+
+        NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine, queue: .main
+        ) { [weak self] _ in
+            self?.isRunning = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.startMicPipeline() }
+        }
     }
 
     func start() {
+        startMicPipeline()
+        isRunning = true
+    }
+
+    private func startMicPipeline() {
         guard !engine.isRunning else { return }
-        // Try with mic first
         do {
             let input  = engine.inputNode
             let format = input.outputFormat(forBus: 0)
             engine.connect(input, to: micMixer, format: format)
             try engine.start()
-            isRunning = true
         } catch {
-            print("AudioEngine: mic start failed (\(error)), retrying without mic")
+            // No mic available — run without it
             engine.disconnectNodeOutput(engine.inputNode)
-            do {
-                try engine.start()
-                isRunning = true
-            } catch {
-                print("AudioEngine: failed completely: \(error)")
-            }
+            try? engine.start()
         }
     }
 
@@ -74,55 +82,19 @@ class AudioEngine: ObservableObject {
         isRunning = false
     }
 
-    private func ensureRunning() {
-        guard !engine.isRunning else { return }
-        try? engine.start()
-        isRunning = engine.isRunning
-    }
-
-    // MARK: - Interruption handling (keeps engine alive)
-
-    private func registerInterruptionHandler() {
-#if os(iOS) || os(tvOS)
-        NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self?.start()
-            }
-        }
-#endif
-        // Also handle config changes (e.g. device plugged in/out)
-        NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.isRunning = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.setupGraph()
-                self.start()
-            }
-        }
-    }
-
-    // MARK: - Play
+    // MARK: - Play sounds (AVAudioPlayer — dead simple, reliable)
 
     func play(slot: SoundSlot) {
         guard let url = slot.audioFileURL else { return }
-        ensureRunning()
         switch slot.playbackMode {
-        case .oneShot: playFresh(slot: slot, url: url)
+        case .oneShot: playOneShot(url: url, volume: Float(slot.volume))
         case .toggle:  playToggle(slot: slot, url: url)
-        case .hold:    playFresh(slot: slot, url: url)
+        case .hold:    playOneShot(url: url, volume: Float(slot.volume))
         }
     }
 
     func stopSlot(slotID: UUID) {
-        toggleNodes[slotID]?.stop()
+        togglePlayers[slotID]?.stop()
         toggleActive.remove(slotID)
     }
 
@@ -130,59 +102,47 @@ class AudioEngine: ObservableObject {
         toggleActive.contains(id)
     }
 
-    /// One-shot: always spawns a fresh player node so sounds layer
-    private func playFresh(slot: SoundSlot, url: URL) {
-        guard let file = try? AVAudioFile(forReading: url) else { return }
-        let node = AVAudioPlayerNode()
-        engine.attach(node)
-        engine.connect(node, to: soundMixer, format: nil)
-        node.volume = Float(slot.volume)
-        node.play()
-        node.scheduleFile(file, at: nil) { [weak self] in
-            // Clean up after playback finishes
-            DispatchQueue.main.async {
-                self?.engine.detach(node)
-            }
-        }
+    /// One-shot: each call creates a new player — sounds layer freely
+    private func playOneShot(url: URL, volume: Float) {
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return }
+        player.volume = volume
+        player.prepareToPlay()
+        player.play()
+        oneShotPlayers.append(player)
+        // Clean up finished players periodically
+        oneShotPlayers = oneShotPlayers.filter { $0.isPlaying }
     }
 
-    /// Toggle: persistent node per slot, start/stop
+    /// Toggle: start playing, press again → stop
     private func playToggle(slot: SoundSlot, url: URL) {
         if toggleActive.contains(slot.id) {
-            // Stop
-            toggleNodes[slot.id]?.stop()
+            togglePlayers[slot.id]?.stop()
+            togglePlayers.removeValue(forKey: slot.id)
             toggleActive.remove(slot.id)
         } else {
-            // Start
-            let node = getOrCreateToggleNode(for: slot.id)
-            guard let file = try? AVAudioFile(forReading: url) else { return }
-            node.volume = Float(slot.volume)
-            node.scheduleFile(file, at: nil) { [weak self] in
-                DispatchQueue.main.async {
-                    self?.toggleActive.remove(slot.id)
+            guard let player = try? AVAudioPlayer(contentsOf: url) else { return }
+            player.volume = Float(slot.volume)
+            player.prepareToPlay()
+            player.play()
+            togglePlayers[slot.id] = player
+            toggleActive.insert(slot.id)
+            // Auto-remove from active when sound finishes naturally
+            let id = slot.id
+            DispatchQueue.main.asyncAfter(deadline: .now() + player.duration + 0.1) { [weak self] in
+                if self?.togglePlayers[id]?.isPlaying == false {
+                    self?.toggleActive.remove(id)
+                    self?.togglePlayers.removeValue(forKey: id)
                 }
             }
-            node.play()
-            toggleActive.insert(slot.id)
         }
-    }
-
-    private func getOrCreateToggleNode(for id: UUID) -> AVAudioPlayerNode {
-        if let existing = toggleNodes[id] { return existing }
-        let node = AVAudioPlayerNode()
-        engine.attach(node)
-        engine.connect(node, to: soundMixer, format: nil)
-        toggleNodes[id] = node
-        node.play()
-        return node
     }
 
     // MARK: - Volume
 
-    func setMasterVolume(_ value: Float) { masterVolume = value }
-    func setMicVolume(_ value: Float)    { micVolume    = value }
-    func setSlotVolume(_ value: Float, for id: UUID) {
-        toggleNodes[id]?.volume = value
+    func setMasterVolume(_ v: Float) { masterVolume = v }
+    func setMicVolume(_ v: Float)    { micVolume    = v }
+    func setSlotVolume(_ v: Float, for id: UUID) {
+        togglePlayers[id]?.volume = v
     }
 
     // MARK: - Devices
@@ -190,8 +150,8 @@ class AudioEngine: ObservableObject {
     func fetchDevices() {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
+            mScope:    kAudioObjectPropertyScopeGlobal,
+            mElement:  kAudioObjectPropertyElementMain
         )
         var size: UInt32 = 0
         AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size)
@@ -201,12 +161,11 @@ class AudioEngine: ObservableObject {
 
         var inputs:  [(id: AudioDeviceID, name: String)] = []
         var outputs: [(id: AudioDeviceID, name: String)] = []
-        var seenIDs = Set<AudioDeviceID>()
+        var seen = Set<AudioDeviceID>()
 
         for id in ids {
-            guard !seenIDs.contains(id), let name = deviceName(id) else { continue }
-            seenIDs.insert(id)
-
+            guard !seen.contains(id), let name = deviceName(id) else { continue }
+            seen.insert(id)
             if hasChannels(id, scope: kAudioDevicePropertyScopeInput)  { inputs.append((id, name))  }
             if hasChannels(id, scope: kAudioDevicePropertyScopeOutput) { outputs.append((id, name)) }
         }
@@ -220,28 +179,25 @@ class AudioEngine: ObservableObject {
     private func hasChannels(_ id: AudioDeviceID, scope: AudioObjectPropertyScope) -> Bool {
         var addr = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: scope,
-            mElement: kAudioObjectPropertyElementMain
+            mScope:    scope,
+            mElement:  kAudioObjectPropertyElementMain
         )
         var size: UInt32 = 0
-        let err = AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size)
-        if err != noErr || size == 0 { return false }
-        let bufferList = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(size))
-        defer { bufferList.deallocate() }
-        AudioObjectGetPropertyData(id, &addr, 0, nil, &size, bufferList)
-        return bufferList.pointee.mNumberBuffers > 0
+        guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr, size > 0 else { return false }
+        let buf = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(size))
+        defer { buf.deallocate() }
+        AudioObjectGetPropertyData(id, &addr, 0, nil, &size, buf)
+        return buf.pointee.mNumberBuffers > 0
     }
 
     private func deviceName(_ id: AudioDeviceID) -> String? {
         var addr = AudioObjectPropertyAddress(
             mSelector: kAudioObjectPropertyName,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
+            mScope:    kAudioObjectPropertyScopeGlobal,
+            mElement:  kAudioObjectPropertyElementMain
         )
         var name: CFString = "" as CFString
         var size = UInt32(MemoryLayout<CFString>.size)
-        let err = AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &name)
-        return err == noErr ? (name as String) : nil
+        return AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &name) == noErr ? (name as String) : nil
     }
 }
-

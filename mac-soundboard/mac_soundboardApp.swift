@@ -8,25 +8,34 @@
 import SwiftUI
 import AppKit
 
-// Suppress the macOS "bonk" sound for unhandled key events
-class SilentApplication: NSApplication {
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown {
-            // Let SwiftUI/AppKit handle it normally, but if nothing handles it
-            // we catch it here so the bonk sound never fires
-            super.sendEvent(event)
-            return
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Swap every window for a QuietWindow to kill the bonk sound
+        for window in NSApp.windows {
+            swapToQuietWindow(window)
         }
-        super.sendEvent(event)
     }
 
-    override func keyDown(with event: NSEvent) {
-        // swallow unhandled key events silently
+    private func swapToQuietWindow(_ original: NSWindow) {
+        guard !(original is QuietWindow) else { return }
+        let quiet = QuietWindow(
+            contentRect: original.frame,
+            styleMask:   original.styleMask,
+            backing:     .buffered,
+            defer:       false
+        )
+        quiet.contentView        = original.contentView
+        quiet.title              = original.title
+        quiet.isReleasedWhenClosed = false
+        quiet.makeKeyAndOrderFront(nil)
+        original.close()
     }
 }
 
-
+@main
 struct MacSoundboardApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
             ContentView()
