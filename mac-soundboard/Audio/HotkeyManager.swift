@@ -6,78 +6,88 @@
 //
 
 
-//
-//  HotkeyManager.swift
-//  mac-soundboard
-//
-
 import Cocoa
 import Carbon
 import Combine
 
 class HotkeyManager: ObservableObject {
     static let shared = HotkeyManager()
-    private var eventTap: CFMachPort?
-    var onKeyPress: ((String) -> Void)?
+
+    var onKeyPress:   ((String) -> Void)?
     var onKeyRelease: ((String) -> Void)?
 
-    @Published var isListening = false
+    private(set) var registeredKeys = Set<String>()
+    private var heldKeys = Set<String>()
+
+    @Published var isListening      = false
     @Published var hasAccessibility = false
 
-    init() {
-        checkAccessibility()
-    }
+    private var eventTap: CFMachPort?
+
+    init() { checkAccessibility() }
 
     func checkAccessibility() {
         hasAccessibility = AXIsProcessTrusted()
     }
 
     func requestAccessibility() {
-        let options: [String: Any] = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        AXIsProcessTrustedWithOptions(options as CFDictionary)
+        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        AXIsProcessTrustedWithOptions(opts as CFDictionary)
+    }
+
+    func updateRegisteredKeys(from slots: [SoundSlot]) {
+        registeredKeys = Set(slots.compactMap { $0.keyBinding })
     }
 
     func start() {
-        guard AXIsProcessTrusted() else {
-            requestAccessibility()
-            return
-        }
+        guard AXIsProcessTrusted() else { requestAccessibility(); return }
+        guard eventTap == nil else { return }
 
-        let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let selfPtr = Unmanaged.passRetained(self).toOpaque()
 
         eventTap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: eventMask,
-            callback: { proxy, type, event, refcon in
+            tap:              .cgAnnotatedSessionEventTap,
+            place:            .headInsertEventTap,
+            options:          .listenOnly,  // passive — never consumes, never causes loops
+            eventsOfInterest: mask,
+            callback: { _, type, event, refcon -> Unmanaged<CGEvent>? in
                 guard let refcon else { return Unmanaged.passRetained(event) }
-                let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
-                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-                let keyString = HotkeyManager.keyCodeToString(Int(keyCode))
+                let mgr = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
 
-                if type == .keyDown {
-                    DispatchQueue.main.async { manager.onKeyPress?(keyString) }
-                } else if type == .keyUp {
-                    DispatchQueue.main.async { manager.onKeyRelease?(keyString) }
+                let keyCode  = event.getIntegerValueField(.keyboardEventKeycode)
+                let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+                let key      = HotkeyManager.keyCodeToString(Int(keyCode))
+
+                guard mgr.registeredKeys.contains(key) else {
+                    return Unmanaged.passRetained(event)
                 }
+
+                if type == .keyDown && !isRepeat {
+                    if !mgr.heldKeys.contains(key) {
+                        mgr.heldKeys.insert(key)
+                        DispatchQueue.main.async { mgr.onKeyPress?(key) }
+                    }
+                } else if type == .keyUp {
+                    mgr.heldKeys.remove(key)
+                    DispatchQueue.main.async { mgr.onKeyRelease?(key) }
+                }
+
                 return Unmanaged.passRetained(event)
             },
-            userInfo: Unmanaged.passRetained(self).toOpaque()
+            userInfo: selfPtr
         )
 
-        if let tap = eventTap {
-            let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-            CGEvent.tapEnable(tap: tap, enable: true)
-            isListening = true
-        }
+        guard let tap = eventTap else { return }
+        let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        isListening = true
     }
 
     func stop() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
+        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
+        eventTap = nil
         isListening = false
     }
 

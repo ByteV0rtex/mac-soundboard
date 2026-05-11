@@ -89,7 +89,7 @@ class AudioEngine: ObservableObject {
         switch slot.playbackMode {
         case .oneShot: playOneShot(url: url, volume: Float(slot.volume))
         case .toggle:  playToggle(slot: slot, url: url)
-        case .hold:    playOneShot(url: url, volume: Float(slot.volume))
+        // hold removed
         }
     }
 
@@ -97,6 +97,15 @@ class AudioEngine: ObservableObject {
         togglePlayers[slotID]?.stop()
         toggleActive.remove(slotID)
     }
+
+    func stopAllSounds() {
+        oneShotPlayers.forEach { $0.stop() }
+        oneShotPlayers.removeAll()
+        togglePlayers.values.forEach { $0.stop() }
+        togglePlayers.removeAll()
+        toggleActive.removeAll()
+    }
+
 
     func isTogglePlaying(_ id: UUID) -> Bool {
         toggleActive.contains(id)

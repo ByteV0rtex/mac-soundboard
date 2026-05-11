@@ -6,6 +6,11 @@
 //
 
 
+//
+//  SoundboardView.swift
+//  mac-soundboard
+//
+
 import SwiftUI
 
 struct SoundboardView: View {
@@ -13,7 +18,7 @@ struct SoundboardView: View {
     @Binding var slots: [SoundSlot]
 
     @State private var editingSlotIndex: Int? = nil
-    @State private var oneShotFlashing: Set<UUID> = []   // brief flash for oneshot/hold
+    @State private var oneShotFlashing:  Set<UUID> = []
     @State private var columnCount: Int = 4
 
     var body: some View {
@@ -23,7 +28,24 @@ struct SoundboardView: View {
                 Text("Soundboard")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
+
                 Spacer()
+
+                // Stop all button
+                Button(action: { audioEngine.stopAllSounds() }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Stop All")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(Color(hex: "#FF6B6B")!)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color(hex: "#FF6B6B")!.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+
                 // Column count picker
                 HStack(spacing: 4) {
                     ForEach([3, 4, 5, 6], id: \.self) { count in
@@ -73,18 +95,19 @@ struct SoundboardView: View {
         .onAppear {
             setupHotkeys()
         }
+        .onChange(of: slots) { _ in
+            HotkeyManager.shared.updateRegisteredKeys(from: slots)
+        }
     }
 
-    // MARK: - Playing state
+    // MARK: - Helpers
 
     private func isPlaying(_ slot: SoundSlot) -> Bool {
         switch slot.playbackMode {
         case .toggle: return audioEngine.isTogglePlaying(slot.id)
-        default:      return oneShotFlashing.contains(slot.id)
+        case .oneShot: return oneShotFlashing.contains(slot.id)
         }
     }
-
-    // MARK: - Sheet binding
 
     var editingBinding: Binding<Int?> {
         Binding(get: { editingSlotIndex }, set: { editingSlotIndex = $0 })
@@ -99,7 +122,7 @@ struct SoundboardView: View {
             return
         }
         audioEngine.play(slot: slot)
-        if slot.playbackMode != .toggle {
+        if slot.playbackMode == .oneShot {
             flashPlaying(slot.id)
         }
     }
@@ -116,16 +139,10 @@ struct SoundboardView: View {
     private func setupHotkeys() {
         HotkeyManager.shared.onKeyPress = { key in
             for (index, slot) in slots.enumerated() {
-                if slot.keyBinding == key {
-                    triggerSlot(at: index)
-                }
+                if slot.keyBinding == key { triggerSlot(at: index) }
             }
         }
-        HotkeyManager.shared.onKeyRelease = { key in
-            for slot in slots where slot.keyBinding == key && slot.playbackMode == .hold {
-                audioEngine.stopSlot(slotID: slot.id)
-            }
-        }
+        // onKeyRelease no longer needed (hold removed)
     }
 }
 
