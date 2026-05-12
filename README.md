@@ -19,7 +19,9 @@ Built in Swift / SwiftUI.
 - **Profiles** — save and load different board layouts
 - **Sound modes** - edit your sound slots with many diffrent features
 
-![Sound Edit](./assets/edit-sound.png)
+<p align="center">
+  <img src="./assets/edit-sound.png" width="420"/>
+</p>
 
 -----
 
