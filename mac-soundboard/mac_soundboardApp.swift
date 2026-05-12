@@ -22,11 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Verify QuietApplication is active
-        if NSApp is QuietApplication {
-            print("✅ QuietApplication active")
-        } else {
-            print("⚠️ QuietApplication NOT active — NSPrincipalClass may not be set")
-        }
+   
     }
 }
 
