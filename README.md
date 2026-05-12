@@ -5,6 +5,8 @@ A macOS soundboard app that combines sound effects with your microphone into a v
 Built in Swift / SwiftUI.
 (With a clean enough UI) 
 
+![App Preview](./assets/app-preview.png)
+
 -----
 
 ## Features
@@ -15,6 +17,9 @@ Built in Swift / SwiftUI.
 - **Per-channel volume** — independent volume control for mic and each sound slot
 - **Simultaneous playback** — sounds layer and overlap without cutting each other off
 - **Profiles** — save and load different board layouts
+- **Sound modes** - edit your sound slots with many diffrent features
+
+![Sound Edit](./assets/edit-sound.png)
 
 -----
 
