@@ -1,0 +1,171 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "blend-mode" : "plus-lighter",
+      "blur-material" : null,
+      "hidden" : false,
+      "layers" : [
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              -255.94424273101663
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              254.13996610579727,
+              -255.94424273101663
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -257.9704577110466,
+              0
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              254.13996610579727,
+              0
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -257.9704577110466,
+              257.9827876196472
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              257.9827876196472
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              254.13996610579727,
+              257.9827876196472
+            ]
+          }
+        },
+        {
+          "image-name" : "Rectangle 2.svg",
+          "name" : "Rectangle 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -257.9704577110466,
+              -255.94424273101663
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Group",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.26
+      }
+    },
+    {
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.10301,0.24941,0.45254,1.00000",
+              "srgb:0.08756,0.09071,0.11303,1.00000"
+            ],
+            "orientation" : {
+              "start" : {
+                "x" : 0.6074719265321216,
+                "y" : 0
+              },
+              "stop" : {
+                "x" : 0.27343766451098617,
+                "y" : 1
+              }
+            }
+          },
+          "glass" : false,
+          "image-name" : "ff.svg",
+          "name" : "ff",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
