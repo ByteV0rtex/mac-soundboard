@@ -1,4 +1,6 @@
-# mac-soundboard
+<h1>
+  <img src="./assets/icon.png" width="30"> mac-soundboard
+</h1>
 
 A macOS soundboard app that combines sound effects with your microphone into a virtual audio device — works with Discord, OBS, or any app that takes mic input.
 
