@@ -3,7 +3,7 @@
 </h1>
 
 A macOS soundboard app that combines sound effects with your microphone into a virtual audio device — works with Discord, OBS, or any app that takes mic input.
-
+Free alternative that's open source and free from bloat for paid macOS soundboard apps like CASTER or Voicemod.
 Built in Swift / SwiftUI.
 (With a clean enough UI) 
 
