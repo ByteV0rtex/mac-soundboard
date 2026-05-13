@@ -1,11 +1,10 @@
 <h1>
-  <img src="./assets/icon.png" width="30"> mac-soundboard
+  <img src="./assets/icon.png" width="45"> mac-soundboard
 </h1>
 
-A macOS soundboard app that combines sound effects with your microphone into a virtual audio device — works with Discord, OBS, or any app that takes mic input.
-Free alternative that's open source and free from bloat for paid macOS soundboard apps like CASTER or Voicemod.
-Built in Swift / SwiftUI.
-(With a clean enough UI) 
+A personal macOS soundboard — plays sound effects alongside your mic into a virtual audio device. Works with Discord, OBS, or anything that takes mic input. Free, open source and un-bloated alternative to Caster and Voicemod.
+
+Built in Swift / SwiftUI with a clean, dark UI that actually looks good.
 
 ![App Preview](./assets/app-preview.png)
 
@@ -13,13 +12,53 @@ Built in Swift / SwiftUI.
 
 ## Features
 
-- **Sound board** — grid of assignable sound buttons, trigger with click or keyboard
-- **Global hotkeys** — key bindings work in any app, not just when the window is focused
-- **Virtual mic** — mixes your voice + sounds into a single audio output via BlackHole
-- **Per-channel volume** — independent volume control for mic and each sound slot
-- **Simultaneous playback** — sounds layer and overlap without cutting each other off
-- **Profiles** — save and load different board layouts
-- **Sound modes** - edit your sound slots with many diffrent features
+### 🎛️ Soundboard
+
+- Grid of assignable sound buttons — 3, 4, 5, or 6 columns
+- Click a button or press its hotkey to trigger a sound
+- Empty slots open the editor when clicked so setup is frictionless
+- **Stop All** button kills every playing sound instantly
+
+### ✏️ Sound Slot Editor
+
+Each slot is fully customizable:
+
+- **Name** — label shown on the button
+- **Emoji or icon** — any emoji or short text as the button face
+- **Color** — 12 preset accent colors to color-code your sounds
+- **Audio file** — import any `.mp3`, `.wav`, or `.aiff` file
+- **Volume** — per-slot volume slider, independent of everything else
+- **Playback mode**
+  - *One Shot* — every press spawns a new instance, sounds layer freely
+  - *Toggle* — first press starts, second press stops
+- **Hotkey** — assign any key, captured directly from your keyboard
+
+### 🎚️ Mixer
+
+- Vertical fader channels for master output, mic, and every assigned sound slot
+- Drag faders to adjust levels in real time
+- Visual volume readout per channel
+
+### 🎙️ Virtual Mic
+
+- Mixes your real mic input with sound effects into a single output
+- Route to **BlackHole 2ch** and set that as your mic in Discord, OBS, or any app
+- Mic and sound volumes controlled independently
+
+### ⌨️ Global Hotkeys
+
+- Hotkeys fire from any app — Discord, games, browser, anywhere
+- Uses `CGEventTap` with Accessibility permission
+- Key repeat ignored — one press, one trigger
+
+### ⚙️ Settings
+
+- Microphone input selector
+- Output device selector — pick BlackHole or any other output
+- BlackHole install status indicator with direct install link
+- Accessibility permission status and one-click grant
+
+-----
 
 <p align="center">
   <img src="./assets/edit-sound.png" width="420"/>
@@ -30,7 +69,7 @@ Built in Swift / SwiftUI.
 ## Requirements
 
 - macOS 13+
-- [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole) (virtual audio driver — free, open source)
+- [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole) — free virtual audio driver
 - Accessibility permission (for global hotkeys)
 
 -----
@@ -38,34 +77,44 @@ Built in Swift / SwiftUI.
 ## Setup
 
 1. Install [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole)
-1. Build and run the app
-1. Grant Accessibility permission when prompted (System Settings → Privacy & Security → Accessibility)
-1. In your app (Discord, OBS, etc.) set the mic input to **BlackHole 2ch**
+1. Open the project in Xcode and build
+1. Grant Accessibility permission when prompted — System Settings → Privacy & Security → Accessibility
+1. In Discord, OBS, etc. set the mic input to **BlackHole 2ch**
 
 -----
 
 ## How it works
 
 ```
-Real Mic Input (AVAudioEngine tap)
-          ↓
-      Mixer Node  ←── Sound slots (AVAudioPlayerNode × N)
-          ↓
-  BlackHole 2ch output  ←── Discord / OBS sees this as mic
+Mic input (AVAudioEngine)
+        ↓
+    Mic mixer node
+        ↓
+  Master mixer  ←── Sound slots (AVAudioPlayer × N, one per trigger)
+        ↓
+  BlackHole 2ch  ←── Discord / OBS sees this as a microphone
 ```
 
-Global hotkeys are handled via `CGEventTap`. Audio pipeline is built on `AVAudioEngine` with one `AVAudioPlayerNode` per sound slot.
+Each sound slot uses its own `AVAudioPlayer` instance so sounds play simultaneously without interfering. Toggle mode keeps a persistent player per slot. One-shot mode spawns a fresh player on every press and cleans up automatically when done.
+
+Global hotkeys are captured via `CGEventTap` at the session level — keys fire regardless of which app is focused.
 
 -----
 
 ## Stack
 
 - Swift / SwiftUI
-- AVAudioEngine + AVAudioPlayerNode
-- CGEventTap
-- BlackHole (virtual audio HAL driver)
+- AVFoundation — `AVAudioPlayer` per slot, `AVAudioEngine` for mic pipeline
+- CGEventTap — global hotkey capture
+- BlackHole — virtual audio HAL driver (third party, free)
 
 -----
 
-> [!NOTE]
-> This is a personal tool, not a polished product. I might add more features in the future. No App Store release planned.
+## License
+
+MIT — do whatever you want with it.
+
+-----
+
+> [!NOTE]  
+> Personal tool, not a polished product. No App Store release planned.
