@@ -67,6 +67,5 @@ Global hotkeys are handled via `CGEventTap`. Audio pipeline is built on `AVAudio
 
 -----
 
-## Notes
-
-This is a personal tool, not a polished product. I might add more features in the future. No App Store release planned.
+> [!NOTE]
+> This is a personal tool, not a polished product. I might add more features in the future. No App Store release planned.
