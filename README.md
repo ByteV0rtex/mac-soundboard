@@ -117,4 +117,4 @@ MIT — do whatever you want with it.
 -----
 
 > [!NOTE]  
-> Personal tool, not a polished product. No App Store release planned.
+> No App Store release planned.
